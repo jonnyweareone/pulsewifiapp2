@@ -1,0 +1,64 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Main gradient -->
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="50%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#ec4899"/>
+    </linearGradient>
+    
+    <!-- Background gradient -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f0f1a"/>
+      <stop offset="100%" style="stop-color:#1a1a2e"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded background -->
+  <rect width="512" height="512" rx="100" ry="100" fill="url(#bgGradient)"/>
+  
+  <!-- Inner border glow -->
+  <rect x="20" y="20" width="472" height="472" rx="85" ry="85" 
+        fill="none" 
+        stroke="url(#iconGradient)" 
+        stroke-width="2" 
+        opacity="0.3"/>
+  
+  <!-- Pulse Icon -->
+  <g transform="translate(256, 256)">
+    <!-- Outer signal arc -->
+    <path d="M -100 -60 A 140 140 0 0 1 100 -60" 
+          stroke="url(#iconGradient)" 
+          stroke-width="16" 
+          fill="none" 
+          stroke-linecap="round"
+          opacity="0.4"/>
+    
+    <!-- Middle signal arc -->
+    <path d="M -70 -40 A 100 100 0 0 1 70 -40" 
+          stroke="url(#iconGradient)" 
+          stroke-width="16" 
+          fill="none" 
+          stroke-linecap="round"
+          opacity="0.6"/>
+    
+    <!-- Inner signal arc -->
+    <path d="M -40 -20 A 60 60 0 0 1 40 -20" 
+          stroke="url(#iconGradient)" 
+          stroke-width="16" 
+          fill="none" 
+          stroke-linecap="round"
+          opacity="0.85"/>
+    
+    <!-- Center pulse dot -->
+    <circle cx="0" cy="20" r="24" fill="url(#iconGradient)"/>
+    
+    <!-- Heartbeat/pulse line -->
+    <path d="M -80 80 L -30 80 L -10 40 L 10 120 L 30 80 L 80 80" 
+          stroke="url(#iconGradient)" 
+          stroke-width="10" 
+          fill="none" 
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+  </g>
+</svg>

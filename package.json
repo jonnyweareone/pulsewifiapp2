@@ -1,0 +1,47 @@
+{
+  "name": "pulse-wifi",
+  "version": "1.0.0",
+  "description": "Pulse WiFi - Seamless public WiFi with Passpoint",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "build:capacitor": "BUILD_MODE=capacitor next build",
+    "cap:add:ios": "npx cap add ios",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:open:ios": "npx cap open ios",
+    "cap:open:android": "npx cap open android",
+    "ios": "npm run build:capacitor && npx cap sync ios && npx cap open ios",
+    "android": "npm run build:capacitor && npx cap sync android && npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@heroicons/react": "^2.2.0",
+    "@supabase/ssr": "^0.5.1",
+    "@supabase/supabase-js": "^2.45.4",
+    "next": "^14.2.15",
+    "plist": "^3.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/plist": "^3.0.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@types/uuid": "^10.0.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.15",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.3"
+  }
+}
