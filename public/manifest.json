@@ -1,32 +1,91 @@
 {
   "name": "Pulse WiFi",
   "short_name": "Pulse WiFi",
-  "description": "Seamless public WiFi - Connect once, stay connected everywhere with Passpoint 2.0",
-  "start_url": "/",
+  "description": "Connect to WiFi hotspots instantly with Pulse WiFi",
+  "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#0a0a0f",
-  "theme_color": "#8b5cf6",
-  "orientation": "portrait-primary",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "scope": "/",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
     },
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable any"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable any"
     }
   ],
-  "categories": ["utilities", "wifi", "connectivity"],
-  "prefer_related_applications": false
+  "screenshots": [
+    {
+      "src": "/screenshots/dashboard.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dashboard"
+    }
+  ],
+  "categories": ["utilities", "lifestyle"],
+  "lang": "en-GB",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "shortcuts": [
+    {
+      "name": "Speed Test",
+      "short_name": "Speed Test",
+      "description": "Run a WiFi speed test",
+      "url": "/check",
+      "icons": [{ "src": "/icons/speedtest-96x96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Find WiFi",
+      "short_name": "Find WiFi",
+      "description": "Find nearby Pulse WiFi hotspots",
+      "url": "/venues",
+      "icons": [{ "src": "/icons/wifi-96x96.png", "sizes": "96x96" }]
+    }
+  ]
 }
