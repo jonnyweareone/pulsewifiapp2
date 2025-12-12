@@ -5,9 +5,9 @@ import { useEffect } from 'react';
 export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      // Register service worker
+      // Register the combined OneSignal + PWA service worker
       navigator.serviceWorker
-        .register('/sw.js')
+        .register('/OneSignalSDKWorker.js')
         .then((registration) => {
           console.log('[PWA] Service worker registered:', registration.scope);
 

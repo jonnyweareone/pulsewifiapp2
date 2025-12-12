@@ -120,7 +120,7 @@ export default function DashboardPage() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 pt-20 pb-12 px-4 sm:px-6 lg:px-8" style={{ paddingTop: 'calc(5rem + env(safe-area-inset-top, 0px))' }}>
         <div className="max-w-7xl mx-auto">
           {/* Welcome Header */}
           <div className="mb-8">

@@ -232,7 +232,7 @@ function PasspointOnboardingContent() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
 
-      <main className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 pt-20 pb-12 px-4 sm:px-6 lg:px-8" style={{ paddingTop: 'calc(5rem + env(safe-area-inset-top, 0px))' }}>
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <div className="mb-8 text-center">
@@ -594,7 +594,7 @@ function OnboardingFallback() {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      <main className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+      <main className="flex-1 pt-20 pb-12 px-4 sm:px-6 lg:px-8" style={{ paddingTop: 'calc(5rem + env(safe-area-inset-top, 0px))' }}>
         <div className="max-w-3xl mx-auto">
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-white">Get Seamless WiFi</h1>

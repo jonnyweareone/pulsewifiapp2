@@ -53,9 +53,12 @@ export function Navbar() {
       ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-white/10 pt-[env(safe-area-inset-top)]">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-white/10">
+      {/* Safe area spacer - this pushes content below the notch/dynamic island */}
+      <div className="h-[env(safe-area-inset-top,0px)] bg-slate-900/80" />
+      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+        <div className="flex justify-between items-center h-14">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 group">
             <PulseWifiIcon className="h-8 w-8" />
@@ -105,11 +108,12 @@ export function Navbar() {
             )}
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile menu button - increased tap target */}
           <div className="md:hidden flex items-center">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-3 -mr-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
                 <XMarkIcon className="h-6 w-6" />
@@ -130,7 +134,7 @@ export function Navbar() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`block px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                   pathname === link.href
                     ? 'bg-white/10 text-white'
                     : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -145,7 +149,7 @@ export function Navbar() {
                 <div className="px-4 py-2 text-sm text-gray-500">{user.email}</div>
                 <button
                   onClick={handleSignOut}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                  className="w-full px-4 py-3 text-left text-sm text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                 >
                   Sign Out
                 </button>
