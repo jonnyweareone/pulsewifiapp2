@@ -42,12 +42,19 @@ interface ManualSettings {
   realm: string;
 }
 
+interface IOSVersion {
+  major: number;
+  minor: number;
+  patch: number;
+}
+
 interface DeviceInfo {
   isIOS: boolean;
   isAndroid: boolean;
   isMac: boolean;
   isWindows: boolean;
   deviceName: string;
+  iosVersion: IOSVersion | null;
 }
 
 const steps = [
@@ -56,10 +63,93 @@ const steps = [
   { id: 3, title: 'Install', description: 'Get your profile' },
 ];
 
-// Detect device type
+// Parse iOS version from user agent
+const parseIOSVersion = (ua: string): IOSVersion | null => {
+  // iOS UA format: "OS 17_4_1" or "OS 18_0"
+  const match = ua.match(/OS (\d+)[_.](\d+)(?:[_.](\d+))?/);
+  if (match) {
+    return {
+      major: parseInt(match[1], 10),
+      minor: parseInt(match[2], 10),
+      patch: parseInt(match[3] || '0', 10),
+    };
+  }
+  return null;
+};
+
+// Get the appropriate settings URL for this iOS version
+// Based on research: iOS 18 broke most App-prefs deep links
+const getIOSSettingsURL = (iosVersion: IOSVersion | null): { 
+  urls: string[]; 
+  method: string;
+  note: string;
+} => {
+  // iOS 18+ - Apple restricted most deep links, they broke in iOS 18
+  // Only basic settings app opening works reliably from web
+  if (iosVersion && iosVersion.major >= 18) {
+    return {
+      urls: [
+        'App-prefs:',                                              // Just opens Settings
+        'prefs:root=General',                                       // Try General
+      ],
+      method: 'ios18+',
+      note: 'iOS 18+ restricts settings deep links. Settings app will open.'
+    };
+  }
+  
+  // iOS 15-17 - App-prefs with root= syntax works best for profiles
+  if (iosVersion && iosVersion.major >= 15) {
+    return {
+      urls: [
+        'App-prefs:root=General&path=ManagedConfigurationList',     // Direct to Profiles
+        'App-prefs:root=General',                                   // Fallback to General
+        'prefs:root=General&path=ManagedConfigurationList',         // Alt syntax
+      ],
+      method: 'ios15-17',
+      note: 'Opening Profile settings...'
+    };
+  }
+  
+  // iOS 11-14 - Both schemes work
+  if (iosVersion && iosVersion.major >= 11) {
+    return {
+      urls: [
+        'App-prefs:root=General&path=ManagedConfigurationList',
+        'prefs:root=General&path=ManagedConfigurationList',
+        'App-prefs:root=General',
+      ],
+      method: 'ios11-14',
+      note: 'Opening Profile settings...'
+    };
+  }
+  
+  // iOS 10 - App-prefs introduced
+  if (iosVersion && iosVersion.major >= 10) {
+    return {
+      urls: [
+        'App-prefs:root=General&path=ManagedConfigurationList',
+        'App-prefs:root=General',
+      ],
+      method: 'ios10',
+      note: 'Opening Settings...'
+    };
+  }
+  
+  // iOS < 10 - Use prefs: scheme
+  return {
+    urls: [
+      'prefs:root=General&path=ManagedConfigurationList',
+      'prefs:root=General',
+    ],
+    method: 'ios-legacy',
+    note: 'Opening Settings...'
+  };
+};
+
+// Detect device type with iOS version
 const detectDevice = (): DeviceInfo => {
   if (typeof window === 'undefined') {
-    return { isIOS: false, isAndroid: false, isMac: false, isWindows: false, deviceName: 'Unknown' };
+    return { isIOS: false, isAndroid: false, isMac: false, isWindows: false, deviceName: 'Unknown', iosVersion: null };
   }
   
   const ua = navigator.userAgent;
@@ -70,11 +160,15 @@ const detectDevice = (): DeviceInfo => {
   const isMac = /Mac/.test(platform) && !isIOS;
   const isWindows = /Win/.test(platform);
   
+  // Parse iOS version
+  const iosVersion = isIOS ? parseIOSVersion(ua) : null;
+  
   let deviceName = 'your device';
   if (isIOS) {
-    if (/iPad/.test(ua)) deviceName = 'iPad';
-    else if (/iPhone/.test(ua)) deviceName = 'iPhone';
-    else deviceName = 'iPhone/iPad';
+    const versionStr = iosVersion ? ` (iOS ${iosVersion.major}.${iosVersion.minor})` : '';
+    if (/iPad/.test(ua)) deviceName = `iPad${versionStr}`;
+    else if (/iPhone/.test(ua)) deviceName = `iPhone${versionStr}`;
+    else deviceName = `iPhone/iPad${versionStr}`;
   } else if (isAndroid) {
     deviceName = 'Android device';
   } else if (isMac) {
@@ -83,7 +177,7 @@ const detectDevice = (): DeviceInfo => {
     deviceName = 'Windows PC';
   }
   
-  return { isIOS, isAndroid, isMac, isWindows, deviceName };
+  return { isIOS, isAndroid, isMac, isWindows, deviceName, iosVersion };
 };
 
 function PasspointOnboardingContent() {
@@ -100,6 +194,7 @@ function PasspointOnboardingContent() {
   const [copied, setCopied] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [profileDownloaded, setProfileDownloaded] = useState(false);
+  const [settingsNote, setSettingsNote] = useState<string | null>(null);
 
   // Detect device on mount
   useEffect(() => {
@@ -204,10 +299,41 @@ function PasspointOnboardingContent() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const openSettings = () => {
-    // Try to open iOS settings (doesn't always work from web)
-    window.location.href = 'App-prefs:General&path=ManagedConfigurationList';
-  };
+  // Version-aware settings opener - tries multiple URLs
+  const openSettings = useCallback(() => {
+    if (!deviceInfo) {
+      // Fallback for unknown device
+      window.location.href = 'App-prefs:';
+      return;
+    }
+
+    const { urls, note } = getIOSSettingsURL(deviceInfo.iosVersion);
+    setSettingsNote(note);
+
+    // Try each URL in sequence
+    // Note: From Safari/web, many of these won't work, but we try anyway
+    let currentIndex = 0;
+    
+    const tryNextUrl = () => {
+      if (currentIndex < urls.length) {
+        const url = urls[currentIndex];
+        console.log(`[Settings] Trying URL ${currentIndex + 1}/${urls.length}: ${url}`);
+        
+        // Try to open the URL
+        window.location.href = url;
+        currentIndex++;
+        
+        // iOS 18 note: If we're on iOS 18+, show a helpful message
+        if (deviceInfo.iosVersion && deviceInfo.iosVersion.major >= 18) {
+          setTimeout(() => {
+            setSettingsNote('If Settings didn\'t open to the right place, go to Settings → General → VPN & Device Management');
+          }, 1500);
+        }
+      }
+    };
+
+    tryNextUrl();
+  }, [deviceInfo]);
 
   if (authLoading) {
     return (
@@ -227,6 +353,66 @@ function PasspointOnboardingContent() {
   };
 
   const recommendedPlatform = getRecommendedPlatform();
+
+  // iOS 18+ specific instructions
+  const getIOSInstructions = () => {
+    if (deviceInfo?.iosVersion && deviceInfo.iosVersion.major >= 18) {
+      return (
+        <ol className="text-sm text-gray-400 space-y-3">
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">1</span>
+            <span>You should see <strong className="text-white">&quot;Profile Downloaded&quot;</strong> notification</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">2</span>
+            <span>Open <strong className="text-white">Settings</strong> app</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">3</span>
+            <span>Go to <strong className="text-white">General</strong> → <strong className="text-white">VPN & Device Management</strong></span>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">4</span>
+            <span>Tap the <strong className="text-white">Downloaded Profile</strong></span>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">5</span>
+            <span>Tap <strong className="text-white">Install</strong> and enter your passcode</span>
+          </li>
+          <li className="flex items-start gap-3">
+            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500/30 text-green-300 flex items-center justify-center text-xs font-bold">✓</span>
+            <span className="text-green-400">Done! Your device will now auto-connect to Pulse WiFi</span>
+          </li>
+        </ol>
+      );
+    }
+
+    // iOS 17 and earlier - "Profile Downloaded" appears at top of Settings
+    return (
+      <ol className="text-sm text-gray-400 space-y-3">
+        <li className="flex items-start gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">1</span>
+          <span>You should see <strong className="text-white">&quot;Profile Downloaded&quot;</strong> notification</span>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">2</span>
+          <span>Open <strong className="text-white">Settings</strong> on your {deviceInfo?.isIOS ? 'iPhone' : 'device'}</span>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">3</span>
+          <span>Tap <strong className="text-white">Profile Downloaded</strong> (near the top)</span>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">4</span>
+          <span>Tap <strong className="text-white">Install</strong> and enter your passcode</span>
+        </li>
+        <li className="flex items-start gap-3">
+          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500/30 text-green-300 flex items-center justify-center text-xs font-bold">✓</span>
+          <span className="text-green-400">Done! Your device will now auto-connect to Pulse WiFi</span>
+        </li>
+      </ol>
+    );
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -432,28 +618,14 @@ function PasspointOnboardingContent() {
                       {selectedPlatform === 'ios' && profileDownloaded && (
                         <div className="text-left bg-white/5 rounded-lg p-4 mb-6">
                           <h3 className="font-medium text-white mb-3">Complete Installation:</h3>
-                          <ol className="text-sm text-gray-400 space-y-3">
-                            <li className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">1</span>
-                              <span>You should see <strong className="text-white">&quot;Profile Downloaded&quot;</strong> notification</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">2</span>
-                              <span>Open <strong className="text-white">Settings</strong> on your {deviceInfo?.isIOS ? 'iPhone' : 'device'}</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">3</span>
-                              <span>Tap <strong className="text-white">Profile Downloaded</strong> (near the top)</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">4</span>
-                              <span>Tap <strong className="text-white">Install</strong> and enter your passcode</span>
-                            </li>
-                            <li className="flex items-start gap-3">
-                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500/30 text-green-300 flex items-center justify-center text-xs font-bold">✓</span>
-                              <span className="text-green-400">Done! Your device will now auto-connect to Pulse WiFi</span>
-                            </li>
-                          </ol>
+                          
+                          {getIOSInstructions()}
+                          
+                          {settingsNote && (
+                            <p className="mt-3 text-xs text-indigo-300 bg-indigo-500/10 p-2 rounded">
+                              {settingsNote}
+                            </p>
+                          )}
                           
                           <div className="mt-4 flex gap-2">
                             <Button variant="secondary" size="sm" onClick={openSettings} className="flex-1">
