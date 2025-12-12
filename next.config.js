@@ -16,9 +16,41 @@ const nextConfig = {
     // Server Actions are stable in Next.js 14+
   },
   
-  // Headers for PWA support
+  // Headers for PWA and Service Worker support
   async headers() {
     return [
+      {
+        // Service Worker must have correct MIME type and scope headers
+        source: '/OneSignalSDKWorker.js',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
+          },
+          {
+            key: 'Service-Worker-Allowed',
+            value: '/',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate',
+          },
+        ],
+      },
+      {
+        // Also handle any legacy sw.js requests
+        source: '/sw.js',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
+          },
+          {
+            key: 'Service-Worker-Allowed',
+            value: '/',
+          },
+        ],
+      },
       {
         source: '/(.*)',
         headers: [
