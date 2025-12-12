@@ -114,12 +114,11 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
     try {
       console.log('[OneSignal] Starting initialization...');
       console.log('[OneSignal] App ID:', appId);
-      console.log('[OneSignal] Safari Web ID:', safariWebId);
       
-      // Initialize the deferred array
+      // Initialize the deferred array - this is the OneSignal recommended pattern
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       
-      // Check if SDK already loaded
+      // Check if SDK script already exists
       const existingScript = document.getElementById('onesignal-sdk');
       
       // Load SDK script if not already loaded
@@ -161,14 +160,14 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
         });
       }, 15000);
 
-      // Push init function to deferred array
+      // Push init function to deferred array - OneSignal will call this when ready
       window.OneSignalDeferred.push(async function(OneSignal: any) {
         try {
           console.log('[OneSignal] Running init...');
           
           // Check if already initialized
           if (OneSignal.initialized) {
-            console.log('[OneSignal] Already initialized, skipping...');
+            console.log('[OneSignal] Already initialized, getting state...');
             clearTimeout(initTimeout);
             
             const isPushSupported = OneSignal.Notifications.isPushSupported();
@@ -192,6 +191,8 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
             return;
           }
           
+          // Initialize OneSignal with minimal configuration
+          // The service worker file OneSignalSDKWorker.js must be at site root
           await OneSignal.init({
             appId: appId,
             safari_web_id: safariWebId,
@@ -199,23 +200,6 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
               enable: false, // We use our own UI
             },
             allowLocalhostAsSecureOrigin: process.env.NODE_ENV === 'development',
-            serviceWorkerPath: '/OneSignalSDKWorker.js',
-            serviceWorkerParam: { scope: '/' },
-            promptOptions: {
-              slidedown: {
-                prompts: [
-                  {
-                    type: "push",
-                    autoPrompt: false,
-                    text: {
-                      actionMessage: "Get instant account verification and Wi-Fi setup notifications",
-                      acceptButton: "Allow",
-                      cancelButton: "Later",
-                    }
-                  }
-                ]
-              }
-            }
           });
 
           clearTimeout(initTimeout);

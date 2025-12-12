@@ -1,31 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
+// OneSignal handles its own service worker registration
+// This component is no longer needed but kept as a placeholder
+// in case we need to add non-push service worker features in the future
 
 export function ServiceWorkerRegistration() {
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      // Register the combined OneSignal + PWA service worker
-      navigator.serviceWorker
-        .register('/OneSignalSDKWorker.js')
-        .then((registration) => {
-          console.log('[PWA] Service worker registered:', registration.scope);
-
-          // Check for updates periodically
-          setInterval(() => {
-            registration.update();
-          }, 60 * 60 * 1000); // Every hour
-        })
-        .catch((error) => {
-          console.error('[PWA] Service worker registration failed:', error);
-        });
-
-      // Handle updates
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        console.log('[PWA] New service worker activated');
-      });
-    }
-  }, []);
-
+  // OneSignal SDK automatically registers OneSignalSDKWorker.js
+  // Do NOT manually register it here as it can cause conflicts
   return null;
 }
