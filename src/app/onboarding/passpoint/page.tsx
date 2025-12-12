@@ -3,7 +3,7 @@
 // Force dynamic rendering to prevent build-time errors when env vars aren't available
 export const dynamic = 'force-dynamic';
 
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
@@ -12,9 +12,6 @@ import { useAuth } from '@/hooks/useAuth';
 import {
   Button,
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
   CardContent,
   Stepper,
   Alert,
@@ -30,6 +27,7 @@ import {
   CheckIcon,
   ClipboardDocumentIcon,
   QuestionMarkCircleIcon,
+  Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 
 type Platform = 'ios' | 'android' | 'manual' | null;
@@ -44,11 +42,49 @@ interface ManualSettings {
   realm: string;
 }
 
+interface DeviceInfo {
+  isIOS: boolean;
+  isAndroid: boolean;
+  isMac: boolean;
+  isWindows: boolean;
+  deviceName: string;
+}
+
 const steps = [
   { id: 1, title: 'Learn', description: 'What is Passpoint?' },
   { id: 2, title: 'Device', description: 'Choose your device' },
   { id: 3, title: 'Install', description: 'Get your profile' },
 ];
+
+// Detect device type
+const detectDevice = (): DeviceInfo => {
+  if (typeof window === 'undefined') {
+    return { isIOS: false, isAndroid: false, isMac: false, isWindows: false, deviceName: 'Unknown' };
+  }
+  
+  const ua = navigator.userAgent;
+  const platform = navigator.platform;
+  
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  const isMac = /Mac/.test(platform) && !isIOS;
+  const isWindows = /Win/.test(platform);
+  
+  let deviceName = 'your device';
+  if (isIOS) {
+    if (/iPad/.test(ua)) deviceName = 'iPad';
+    else if (/iPhone/.test(ua)) deviceName = 'iPhone';
+    else deviceName = 'iPhone/iPad';
+  } else if (isAndroid) {
+    deviceName = 'Android device';
+  } else if (isMac) {
+    deviceName = 'Mac';
+  } else if (isWindows) {
+    deviceName = 'Windows PC';
+  }
+  
+  return { isIOS, isAndroid, isMac, isWindows, deviceName };
+};
 
 function PasspointOnboardingContent() {
   const router = useRouter();
@@ -62,15 +98,29 @@ function PasspointOnboardingContent() {
   const [success, setSuccess] = useState(false);
   const [manualSettings, setManualSettings] = useState<ManualSettings | null>(null);
   const [copied, setCopied] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [profileDownloaded, setProfileDownloaded] = useState(false);
 
-  // Check for platform param to skip to step 2
+  // Detect device on mount
+  useEffect(() => {
+    setDeviceInfo(detectDevice());
+  }, []);
+
+  // Auto-select platform based on device and check for platform param
   useEffect(() => {
     const platform = searchParams.get('platform') as Platform;
     if (platform && ['ios', 'android', 'manual'].includes(platform)) {
       setSelectedPlatform(platform);
-      setCurrentStep(1);
+      setCurrentStep(2); // Go straight to install
+    } else if (deviceInfo) {
+      // Auto-select based on detected device
+      if (deviceInfo.isIOS || deviceInfo.isMac) {
+        setSelectedPlatform('ios');
+      } else if (deviceInfo.isAndroid) {
+        setSelectedPlatform('android');
+      }
     }
-  }, [searchParams]);
+  }, [searchParams, deviceInfo]);
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
@@ -109,14 +159,11 @@ function PasspointOnboardingContent() {
         // Download the profile
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'pulse-wifi-passpoint.mobileconfig';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
+        
+        // On iOS, directly navigate to trigger profile download
+        window.location.href = url;
+        
+        setProfileDownloaded(true);
         setSuccess(true);
       } else if (selectedPlatform === 'android') {
         const response = await fetch('/api/passpoint/android-profile', {
@@ -157,6 +204,11 @@ function PasspointOnboardingContent() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const openSettings = () => {
+    // Try to open iOS settings (doesn't always work from web)
+    window.location.href = 'App-prefs:General&path=ManagedConfigurationList';
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -164,6 +216,17 @@ function PasspointOnboardingContent() {
       </div>
     );
   }
+
+  // Get recommended platform display
+  const getRecommendedPlatform = () => {
+    if (!deviceInfo) return null;
+    if (deviceInfo.isIOS) return 'ios';
+    if (deviceInfo.isMac) return 'ios';
+    if (deviceInfo.isAndroid) return 'android';
+    return 'manual';
+  };
+
+  const recommendedPlatform = getRecommendedPlatform();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -175,7 +238,7 @@ function PasspointOnboardingContent() {
           <div className="mb-8 text-center">
             <h1 className="text-3xl font-bold text-white">Get Seamless WiFi</h1>
             <p className="mt-2 text-gray-400">
-              Set up Passpoint for automatic WiFi connectivity
+              {deviceInfo ? `Setting up WiFi for your ${deviceInfo.deviceName}` : 'Set up Passpoint for automatic WiFi connectivity'}
             </p>
           </div>
 
@@ -248,14 +311,18 @@ function PasspointOnboardingContent() {
                     Select Your Device
                   </h2>
                   <p className="text-gray-400 mb-8 text-center">
-                    Choose your device type to get the right configuration
+                    {deviceInfo ? (
+                      <>We detected you&apos;re using a <span className="text-white font-medium">{deviceInfo.deviceName}</span></>
+                    ) : (
+                      'Choose your device type to get the right configuration'
+                    )}
                   </p>
 
                   <div className="space-y-4">
                     <button
                       onClick={() => handlePlatformSelect('ios')}
                       className={`w-full p-5 rounded-xl border transition-all duration-200 text-left flex items-center gap-4 ${
-                        selectedPlatform === 'ios'
+                        selectedPlatform === 'ios' || recommendedPlatform === 'ios'
                           ? 'border-indigo-500 bg-indigo-500/10'
                           : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
                       }`}
@@ -264,7 +331,14 @@ function PasspointOnboardingContent() {
                         <DevicePhoneMobileIcon className="h-6 w-6 text-gray-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-white">iPhone or Mac</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-white">iPhone, iPad or Mac</p>
+                          {recommendedPlatform === 'ios' && (
+                            <span className="text-xs px-2 py-0.5 bg-indigo-500/30 text-indigo-300 rounded-full">
+                              Recommended
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-400">
                           iOS 11+ or macOS 10.13+
                         </p>
@@ -275,7 +349,7 @@ function PasspointOnboardingContent() {
                     <button
                       onClick={() => handlePlatformSelect('android')}
                       className={`w-full p-5 rounded-xl border transition-all duration-200 text-left flex items-center gap-4 ${
-                        selectedPlatform === 'android'
+                        selectedPlatform === 'android' || recommendedPlatform === 'android'
                           ? 'border-green-500 bg-green-500/10'
                           : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
                       }`}
@@ -284,7 +358,14 @@ function PasspointOnboardingContent() {
                         <DevicePhoneMobileIcon className="h-6 w-6 text-green-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-white">Android</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-white">Android</p>
+                          {recommendedPlatform === 'android' && (
+                            <span className="text-xs px-2 py-0.5 bg-green-500/30 text-green-300 rounded-full">
+                              Recommended
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-400">
                           Android 6.0+ with Passpoint support
                         </p>
@@ -295,7 +376,7 @@ function PasspointOnboardingContent() {
                     <button
                       onClick={() => handlePlatformSelect('manual')}
                       className={`w-full p-5 rounded-xl border transition-all duration-200 text-left flex items-center gap-4 ${
-                        selectedPlatform === 'manual'
+                        selectedPlatform === 'manual' || recommendedPlatform === 'manual'
                           ? 'border-blue-500 bg-blue-500/10'
                           : 'border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20'
                       }`}
@@ -304,7 +385,14 @@ function PasspointOnboardingContent() {
                         <ComputerDesktopIcon className="h-6 w-6 text-blue-400" />
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-white">Other / Manual</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-white">Other / Manual</p>
+                          {recommendedPlatform === 'manual' && (
+                            <span className="text-xs px-2 py-0.5 bg-blue-500/30 text-blue-300 rounded-full">
+                              Recommended
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-400">
                           Windows, Linux, or manual configuration
                         </p>
@@ -341,16 +429,42 @@ function PasspointOnboardingContent() {
                         {selectedPlatform === 'ios' ? 'Profile Downloaded!' : 'Configuration Ready!'}
                       </h2>
 
-                      {selectedPlatform === 'ios' && (
+                      {selectedPlatform === 'ios' && profileDownloaded && (
                         <div className="text-left bg-white/5 rounded-lg p-4 mb-6">
-                          <h3 className="font-medium text-white mb-2">Next Steps:</h3>
-                          <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
-                            <li>Open the downloaded file on your iPhone or Mac</li>
-                            <li>Go to Settings → General → VPN & Device Management</li>
-                            <li>Tap on the Pulse WiFi profile</li>
-                            <li>Tap &quot;Install&quot; and enter your device passcode</li>
-                            <li>Your device will now auto-connect to Pulse WiFi!</li>
+                          <h3 className="font-medium text-white mb-3">Complete Installation:</h3>
+                          <ol className="text-sm text-gray-400 space-y-3">
+                            <li className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">1</span>
+                              <span>You should see <strong className="text-white">&quot;Profile Downloaded&quot;</strong> notification</span>
+                            </li>
+                            <li className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">2</span>
+                              <span>Open <strong className="text-white">Settings</strong> on your {deviceInfo?.isIOS ? 'iPhone' : 'device'}</span>
+                            </li>
+                            <li className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">3</span>
+                              <span>Tap <strong className="text-white">Profile Downloaded</strong> (near the top)</span>
+                            </li>
+                            <li className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-500/30 text-indigo-300 flex items-center justify-center text-xs font-bold">4</span>
+                              <span>Tap <strong className="text-white">Install</strong> and enter your passcode</span>
+                            </li>
+                            <li className="flex items-start gap-3">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-green-500/30 text-green-300 flex items-center justify-center text-xs font-bold">✓</span>
+                              <span className="text-green-400">Done! Your device will now auto-connect to Pulse WiFi</span>
+                            </li>
                           </ol>
+                          
+                          <div className="mt-4 flex gap-2">
+                            <Button variant="secondary" size="sm" onClick={openSettings} className="flex-1">
+                              <Cog6ToothIcon className="h-4 w-4 mr-1" />
+                              Open Settings
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={handleDownloadProfile} className="flex-1">
+                              <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                              Re-download
+                            </Button>
+                          </div>
                         </div>
                       )}
 
@@ -427,7 +541,7 @@ function PasspointOnboardingContent() {
 
                         <h2 className="text-2xl font-bold text-white mb-4">
                           {selectedPlatform === 'ios'
-                            ? 'Download iOS/macOS Profile'
+                            ? `Download ${deviceInfo?.isIOS ? 'iPhone' : deviceInfo?.isMac ? 'Mac' : 'iOS'} Profile`
                             : selectedPlatform === 'android'
                             ? 'Get Android Configuration'
                             : 'View Manual Settings'}
@@ -435,7 +549,7 @@ function PasspointOnboardingContent() {
 
                         <p className="text-gray-400">
                           {selectedPlatform === 'ios'
-                            ? 'Click below to download your personalized WiFi profile. Install it on your device to enable automatic connectivity.'
+                            ? `Click below to download your personalized WiFi profile. You'll then install it in ${deviceInfo?.isIOS ? 'Settings' : 'System Preferences'}.`
                             : selectedPlatform === 'android'
                             ? 'We\'ll generate your WiFi credentials. Use them to configure your Android device for Pulse WiFi.'
                             : 'Get the manual WiFi settings to configure any device for Pulse WiFi.'}
@@ -447,7 +561,7 @@ function PasspointOnboardingContent() {
                           {selectedPlatform === 'ios' ? (
                             <>
                               <ArrowDownTrayIcon className="mr-2 h-5 w-5" />
-                              Download Profile
+                              Download WiFi Profile
                             </>
                           ) : (
                             <>

@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import './globals.css';
-import { ServiceWorkerRegistration, PWAInstallPrompt } from '@/components/pwa';
+import { ServiceWorkerRegistration, PWAInstallPrompt, InstallGate } from '@/components/pwa';
 
 export const metadata: Metadata = {
   title: 'Pulse WiFi - Seamless Public WiFi',
@@ -75,7 +75,9 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
         <ServiceWorkerRegistration />
-        {children}
+        <InstallGate>
+          {children}
+        </InstallGate>
         <PWAInstallPrompt />
       </body>
     </html>

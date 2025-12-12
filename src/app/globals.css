@@ -10,6 +10,11 @@
 }
 
 /* Base Styles */
+html {
+  /* Enable safe area insets for iOS */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: linear-gradient(
@@ -19,6 +24,10 @@ body {
     rgb(var(--background-start-rgb)) 100%
   );
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
+  /* Ensure content doesn't go under the notch */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Custom scrollbar */
