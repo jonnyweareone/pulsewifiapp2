@@ -373,6 +373,51 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
     }
   }, []);
 
+  // Link Supabase user ID to OneSignal for targeting by external_user_id
+  const linkUserId = useCallback(async (userId: string): Promise<boolean> => {
+    if (!window.OneSignal) {
+      console.warn('[OneSignal] SDK not ready for linking user ID');
+      return false;
+    }
+    
+    try {
+      await window.OneSignal.login(userId);
+      console.log('[OneSignal] User ID linked:', userId);
+      return true;
+    } catch (error) {
+      console.error('[OneSignal] Failed to link user ID:', error);
+      return false;
+    }
+  }, []);
+
+  // Unlink user ID (on logout)
+  const unlinkUserId = useCallback(async (): Promise<boolean> => {
+    if (!window.OneSignal) return false;
+    
+    try {
+      await window.OneSignal.logout();
+      console.log('[OneSignal] User ID unlinked');
+      return true;
+    } catch (error) {
+      console.error('[OneSignal] Failed to unlink user ID:', error);
+      return false;
+    }
+  }, []);
+
+  // Set tags for segmentation
+  const setTags = useCallback(async (tags: Record<string, string>): Promise<boolean> => {
+    if (!window.OneSignal) return false;
+    
+    try {
+      await window.OneSignal.User.addTags(tags);
+      console.log('[OneSignal] Tags set:', tags);
+      return true;
+    } catch (error) {
+      console.error('[OneSignal] Failed to set tags:', error);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     initOneSignal();
   }, [initOneSignal]);
@@ -381,6 +426,9 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
     ...state,
     requestPermission,
     optOut,
+    linkUserId,
+    unlinkUserId,
+    setTags,
     // Expose helpers
     isIOS: isIOSDevice(),
     isStandalone: isStandalonePWA(),
