@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="wifiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#e0e7ff"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="108" fill="url(#bgGrad)"/>
+  
+  <!-- WiFi Arcs -->
+  <g fill="none" stroke="url(#wifiGrad)" stroke-width="28" stroke-linecap="round">
+    <!-- Outer arc -->
+    <path d="M 130 220 A 150 150 0 0 1 382 220" opacity="0.5"/>
+    <!-- Middle arc -->
+    <path d="M 175 260 A 100 100 0 0 1 337 260" opacity="0.7"/>
+    <!-- Inner arc -->
+    <path d="M 210 295 A 55 55 0 0 1 302 295" opacity="0.9"/>
+  </g>
+  
+  <!-- Center dot -->
+  <circle cx="256" cy="330" r="24" fill="url(#wifiGrad)"/>
+  
+  <!-- Pulse line -->
+  <path d="M 140 410 L 190 410 L 220 370 L 256 450 L 292 370 L 322 410 L 372 410" 
+        fill="none" stroke="url(#wifiGrad)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
