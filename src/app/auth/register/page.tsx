@@ -8,10 +8,37 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
+import { createClient } from '@/lib/supabase/client';
 import { Button, Input, Card, CardHeader, CardTitle, CardDescription, CardContent, Alert } from '@/components/ui';
-import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriangleIcon, ShareIcon, UserIcon } from '@heroicons/react/24/outline';
 
 type Step = 'form' | 'install-pwa' | 'enable-push';
+
+// Check if username is available
+async function checkUsernameAvailable(username: string): Promise<boolean> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('username', username.toLowerCase())
+    .maybeSingle();
+  
+  return !data && !error;
+}
+
+// Generate username suggestion from name
+function generateUsernameSuggestion(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 15);
+  
+  if (base.length < 3) return '';
+  
+  // Add random numbers if too short
+  const suffix = Math.floor(Math.random() * 999).toString().padStart(2, '0');
+  return base + suffix;
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -26,11 +53,18 @@ export default function RegisterPage() {
     isReady,
     isIOS,
     isStandalone,
+    linkUserId,
+    setTags,
     error: pushError 
   } = usePushNotifications();
   const { isInstallable, promptInstall } = usePWAInstall();
 
   const [step, setStep] = useState<Step>('form');
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,14 +73,90 @@ export default function RegisterPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [debugTaps, setDebugTaps] = useState(0);
+  const [isReturningUser, setIsReturningUser] = useState(false);
 
   // iOS needs PWA install if not in standalone mode
   const needsPWAInstall = isIOS && !isStandalone;
+
+  // Check if this is a returning user (has existing OneSignal subscription)
+  useEffect(() => {
+    if (isReady && playerId) {
+      // They already have a push subscription - likely returning
+      setIsReturningUser(true);
+      console.log('[Register] Detected returning user with existing push subscription');
+    }
+  }, [isReady, playerId]);
+
+  // Auto-generate username suggestion when name changes
+  useEffect(() => {
+    if (displayName && !username) {
+      const suggestion = generateUsernameSuggestion(displayName);
+      if (suggestion) {
+        setUsername(suggestion);
+      }
+    }
+  }, [displayName, username]);
+
+  // Debounced username availability check
+  useEffect(() => {
+    if (!username || username.length < 3) {
+      setUsernameAvailable(null);
+      setUsernameError(null);
+      return;
+    }
+
+    // Validate format
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(username)) {
+      setUsernameError('Username must start with a letter and contain only letters, numbers, and underscores');
+      setUsernameAvailable(false);
+      return;
+    }
+
+    if (username.length > 30) {
+      setUsernameError('Username must be 30 characters or less');
+      setUsernameAvailable(false);
+      return;
+    }
+
+    setUsernameError(null);
+    setCheckingUsername(true);
+
+    const timer = setTimeout(async () => {
+      const available = await checkUsernameAvailable(username);
+      setUsernameAvailable(available);
+      setCheckingUsername(false);
+      if (!available) {
+        setUsernameError('This username is already taken');
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [username]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Validate name
+    if (!displayName.trim()) {
+      setError('Please enter your name');
+      setLoading(false);
+      return;
+    }
+
+    // Validate username
+    if (!username || username.length < 3) {
+      setError('Username must be at least 3 characters');
+      setLoading(false);
+      return;
+    }
+
+    if (!usernameAvailable) {
+      setError('Please choose a different username');
+      setLoading(false);
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -61,16 +171,31 @@ export default function RegisterPage() {
     }
 
     // Create account without email verification
-    const { data, error } = await signUp(email, password);
+    const { data, error: signUpError } = await signUp(email, password);
 
-    if (error) {
-      setError(error.message);
+    if (signUpError) {
+      setError(signUpError.message);
       setLoading(false);
       return;
     }
 
     if (data?.user) {
       setUserId(data.user.id);
+      
+      // Update profile with name and username
+      const supabase = createClient();
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          display_name: displayName.trim(),
+          username: username.toLowerCase(),
+        })
+        .eq('user_id', data.user.id);
+
+      if (profileError) {
+        console.error('[Register] Failed to update profile:', profileError);
+        // Don't fail registration for this, but log it
+      }
       
       // On iOS not in standalone mode, need PWA install first
       if (needsPWAInstall) {
@@ -106,6 +231,17 @@ export default function RegisterPage() {
         setError('Please allow notifications when prompted. If you accidentally blocked them, go to your browser/device settings to enable notifications for this site.');
         setLoading(false);
         return;
+      }
+
+      // Link user ID to OneSignal for targeting
+      if (userId) {
+        await linkUserId(userId);
+        
+        // Set tags for the user
+        await setTags({
+          username: username.toLowerCase(),
+          registered_at: new Date().toISOString().split('T')[0],
+        });
       }
 
       // Notifications enabled successfully - go straight to dashboard
@@ -152,6 +288,18 @@ export default function RegisterPage() {
             <span className="text-2xl font-bold gradient-text">Pulse WiFi</span>
           </Link>
 
+          {isReturningUser && (
+            <Alert variant="info" className="mb-4">
+              <div className="flex items-start gap-2">
+                <UserIcon className="h-5 w-5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">Welcome back!</p>
+                  <p className="text-sm">It looks like you've used Pulse WiFi before. Already have an account? <Link href="/auth/login" className="text-indigo-400 hover:text-indigo-300 underline">Sign in</Link></p>
+                </div>
+              </div>
+            </Alert>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-center">Create your account</CardTitle>
@@ -168,6 +316,45 @@ export default function RegisterPage() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  type="text"
+                  label="Your Name"
+                  placeholder="John Smith"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  required
+                  autoComplete="name"
+                  helperText="This is private and won't be shown publicly"
+                />
+
+                <div>
+                  <Input
+                    type="text"
+                    label="Username"
+                    placeholder="johnsmith42"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    required
+                    autoComplete="username"
+                    error={usernameError || undefined}
+                    className={usernameAvailable === true ? 'border-green-500' : undefined}
+                  />
+                  <div className="mt-1 flex items-center gap-2 text-sm">
+                    {checkingUsername && (
+                      <span className="text-gray-500">Checking...</span>
+                    )}
+                    {!checkingUsername && usernameAvailable === true && !usernameError && (
+                      <span className="text-green-400 flex items-center gap-1">
+                        <CheckIcon className="h-4 w-4" />
+                        Available
+                      </span>
+                    )}
+                    {!checkingUsername && username && !usernameError && (
+                      <span className="text-gray-500">@{username}</span>
+                    )}
+                  </div>
+                </div>
+
                 <Input
                   type="email"
                   label="Email address"
@@ -342,7 +529,9 @@ export default function RegisterPage() {
               <BellIcon className="h-8 w-8 text-indigo-400" />
             </div>
             
-            <h2 className="text-2xl font-bold text-white mb-2">Enable Notifications</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">
+              {displayName ? `Hey ${displayName.split(' ')[0]}!` : 'Enable Notifications'}
+            </h2>
             <p className="text-gray-400 mb-6">
               We'll send you important updates about your WiFi connection and new venues nearby.
             </p>
@@ -463,6 +652,8 @@ export default function RegisterPage() {
                 <p>playerId: {playerId || 'null'}</p>
                 <p>pushError: {pushError || 'null'}</p>
                 <p>userId: {userId || 'null'}</p>
+                <p>username: {username || 'null'}</p>
+                <p>isReturningUser: {String(isReturningUser)}</p>
                 <p>userAgent: {typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 50) + '...' : 'N/A'}</p>
               </div>
             )}

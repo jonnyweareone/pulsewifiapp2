@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { AuthenticatedLayout } from '@/components/layout/AuthenticatedLayout';
 import { useAuth } from '@/hooks/useAuth';
 import {
   Button,

@@ -142,6 +142,38 @@ export async function isSubscribed(): Promise<boolean> {
 // ============================================
 
 /**
+ * Set user profile data for personalized notifications
+ * Called after registration with username
+ */
+export async function setUserProfile(data: {
+  username: string;
+  displayName?: string;
+  email?: string;
+}) {
+  const tags: Record<string, string> = {
+    username: data.username.toLowerCase(),
+  };
+  
+  // First name for personalized messages like "Hey John!"
+  if (data.displayName) {
+    const firstName = data.displayName.split(' ')[0];
+    tags.first_name = firstName;
+    tags.display_name = data.displayName;
+  }
+  
+  if (data.email) {
+    // Only store domain for privacy, useful for business segmentation
+    const domain = data.email.split('@')[1];
+    tags.email_domain = domain;
+  }
+  
+  tags.profile_set = 'true';
+  tags.profile_date = new Date().toISOString().split('T')[0];
+  
+  await setUserTags(tags);
+}
+
+/**
  * Track when user connects to WiFi at a venue
  */
 export async function trackWiFiConnection(venueName: string, venueId: string) {
@@ -208,4 +240,25 @@ export async function trackPasspointInstalled(platform: 'ios' | 'android' | 'mac
     passpoint_platform: platform,
     passpoint_date: new Date().toISOString().split('T')[0],
   });
+}
+
+/**
+ * Track user activity for engagement scoring
+ */
+export async function trackAppOpen() {
+  const tags = await getUserTags();
+  const sessionCount = parseInt(tags?.session_count || '0') + 1;
+  
+  await setUserTags({
+    session_count: sessionCount.toString(),
+    last_active: new Date().toISOString().split('T')[0],
+  });
+}
+
+/**
+ * Check if this device has been here before (returning user detection)
+ */
+export async function isReturningDevice(): Promise<boolean> {
+  const tags = await getUserTags();
+  return tags?.profile_set === 'true' || tags?.has_connected === 'true';
 }
