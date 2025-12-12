@@ -9,14 +9,23 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { Button, Input, Card, CardHeader, CardTitle, CardDescription, CardContent, Alert } from '@/components/ui';
-import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
+import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 type Step = 'form' | 'install-pwa' | 'enable-push' | 'verification-sent';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { signUp, user } = useAuth();
-  const { isSupported, isEnabled, playerId, requestPermission, permissionStatus } = usePushNotifications();
+  const { 
+    isSupported, 
+    isEnabled, 
+    playerId, 
+    requestPermission, 
+    permissionStatus,
+    isInitializing,
+    isReady,
+    error: pushError 
+  } = usePushNotifications();
   const { isIOS, isStandalone, isInstallable, promptInstall } = usePWAInstall();
 
   const [step, setStep] = useState<Step>('form');
@@ -26,6 +35,7 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   // Check if iOS and needs PWA install first
   const needsPWAInstall = isIOS && !isStandalone;
@@ -75,24 +85,36 @@ export default function RegisterPage() {
     setError(null);
 
     try {
+      console.log('[Register] Starting push enable flow...');
       const granted = await requestPermission();
+      console.log('[Register] Permission granted:', granted);
       
       if (!granted) {
-        setError('Notifications are required to verify your account and receive Wi-Fi settings');
+        setError('Notifications are required to verify your account. Please allow notifications when prompted, or enable them in your browser settings.');
         setLoading(false);
         return;
       }
 
-      // Wait for player ID to be available
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for player ID to be available (with timeout)
+      let currentPlayerId = playerId;
+      let attempts = 0;
+      const maxAttempts = 10;
       
-      const currentPlayerId = playerId || window.OneSignal?.User?.PushSubscription?.id;
+      while (!currentPlayerId && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        currentPlayerId = window.OneSignal?.User?.PushSubscription?.id;
+        attempts++;
+        console.log('[Register] Waiting for player ID, attempt:', attempts, 'id:', currentPlayerId);
+      }
       
       if (!currentPlayerId) {
-        setError('Failed to register for notifications. Please try again.');
+        console.error('[Register] No player ID after', maxAttempts, 'attempts');
+        setError('Failed to register for notifications. Please refresh the page and try again.');
         setLoading(false);
         return;
       }
+
+      console.log('[Register] Got player ID:', currentPlayerId);
 
       // Send verification notification
       const response = await fetch('/api/auth/send-verification', {
@@ -104,24 +126,25 @@ export default function RegisterPage() {
         }),
       });
 
+      const result = await response.json();
+      console.log('[Register] Send verification result:', result);
+
       if (!response.ok) {
-        throw new Error('Failed to send verification');
+        throw new Error(result.error || 'Failed to send verification');
       }
 
       setStep('verification-sent');
-    } catch (err) {
-      setError('Failed to send verification. Please try again.');
+    } catch (err: any) {
+      console.error('[Register] Error:', err);
+      setError(err.message || 'Failed to send verification. Please try again.');
     }
     
     setLoading(false);
   };
 
-  const handleInstallPWA = async () => {
-    if (isInstallable) {
-      await promptInstall();
-    }
-    // After install attempt, move to push step
-    // (iOS users need to manually install, so we show instructions)
+  const handleSkipPush = () => {
+    // Allow users to skip if notifications aren't working
+    router.push('/dashboard');
   };
 
   // Form step
@@ -330,6 +353,18 @@ export default function RegisterPage() {
               </Alert>
             )}
 
+            {!isSupported && (
+              <Alert variant="warning" className="mb-6 text-left">
+                <div className="flex items-start gap-2">
+                  <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Notifications not supported</p>
+                    <p className="text-sm mt-1">Your browser doesn't support push notifications. You can still use Pulse WiFi but won't receive instant updates.</p>
+                  </div>
+                </div>
+              </Alert>
+            )}
+
             <div className="bg-white/5 rounded-lg p-4 mb-6 text-left">
               <p className="text-sm text-gray-300 mb-2">You'll receive:</p>
               <ul className="space-y-1 text-sm text-gray-400">
@@ -348,18 +383,58 @@ export default function RegisterPage() {
               </ul>
             </div>
 
-            <Button 
-              onClick={handleEnablePush}
-              loading={loading}
-              className="w-full"
-            >
-              <BellIcon className="h-5 w-5 mr-2" />
-              Enable Notifications
-            </Button>
+            {isSupported ? (
+              <Button 
+                onClick={handleEnablePush}
+                loading={loading}
+                disabled={isInitializing}
+                className="w-full"
+              >
+                {isInitializing ? (
+                  'Loading...'
+                ) : (
+                  <>
+                    <BellIcon className="h-5 w-5 mr-2" />
+                    Enable Notifications
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button 
+                onClick={handleSkipPush}
+                className="w-full"
+              >
+                Continue to Dashboard
+              </Button>
+            )}
 
-            <p className="text-xs text-gray-500 mt-4">
-              You can manage notification preferences anytime in settings
-            </p>
+            <button
+              onClick={handleSkipPush}
+              className="mt-4 text-sm text-gray-500 hover:text-gray-400 block w-full"
+            >
+              Skip for now (limited access)
+            </button>
+
+            {/* Debug info - tap 5 times to show */}
+            <button 
+              onClick={() => setShowDebug(!showDebug)}
+              className="mt-4 text-xs text-gray-600 hover:text-gray-500"
+            >
+              {showDebug ? 'Hide debug' : ''}
+            </button>
+            
+            {showDebug && (
+              <div className="mt-4 p-3 bg-black/50 rounded text-left text-xs font-mono text-gray-400">
+                <p>isSupported: {String(isSupported)}</p>
+                <p>isReady: {String(isReady)}</p>
+                <p>isInitializing: {String(isInitializing)}</p>
+                <p>isEnabled: {String(isEnabled)}</p>
+                <p>permission: {permissionStatus || 'null'}</p>
+                <p>playerId: {playerId || 'null'}</p>
+                <p>pushError: {pushError || 'null'}</p>
+                <p>userId: {userId || 'null'}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
