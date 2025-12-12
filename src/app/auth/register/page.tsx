@@ -11,7 +11,7 @@ import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { Button, Input, Card, CardHeader, CardTitle, CardDescription, CardContent, Alert } from '@/components/ui';
 import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
 
-type Step = 'form' | 'install-pwa' | 'enable-push' | 'verification-sent';
+type Step = 'form' | 'install-pwa' | 'enable-push';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -108,52 +108,16 @@ export default function RegisterPage() {
         return;
       }
 
-      // Wait for player ID to be available (with timeout)
-      let currentPlayerId = playerId;
-      let attempts = 0;
-      const maxAttempts = 15;
+      // Notifications enabled successfully - go straight to dashboard
+      // OneSignal will send a "Thanks for subscribing" notification automatically
+      console.log('[Register] Notifications enabled, redirecting to dashboard...');
+      router.push('/dashboard');
       
-      while (!currentPlayerId && attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        currentPlayerId = window.OneSignal?.User?.PushSubscription?.id;
-        attempts++;
-        console.log('[Register] Waiting for player ID, attempt:', attempts, 'id:', currentPlayerId);
-      }
-      
-      if (!currentPlayerId) {
-        console.error('[Register] No player ID after', maxAttempts, 'attempts');
-        // Still proceed to dashboard, but without verification
-        setError('Notifications enabled but we couldn\'t complete verification. You can continue to the dashboard.');
-        setLoading(false);
-        return;
-      }
-
-      console.log('[Register] Got player ID:', currentPlayerId);
-
-      // Send verification notification
-      const response = await fetch('/api/auth/send-verification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          player_id: currentPlayerId,
-        }),
-      });
-
-      const result = await response.json();
-      console.log('[Register] Send verification result:', result);
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to send verification');
-      }
-
-      setStep('verification-sent');
     } catch (err: any) {
       console.error('[Register] Error:', err);
-      setError(err.message || 'Failed to send verification. Please try again.');
+      setError(err.message || 'Failed to enable notifications. Please try again.');
+      setLoading(false);
     }
-    
-    setLoading(false);
   };
 
   const handleSkipPush = () => {
@@ -380,7 +344,7 @@ export default function RegisterPage() {
             
             <h2 className="text-2xl font-bold text-white mb-2">Enable Notifications</h2>
             <p className="text-gray-400 mb-6">
-              We'll send you a verification link and your Wi-Fi setup instructions via notification.
+              We'll send you important updates about your WiFi connection and new venues nearby.
             </p>
 
             {(error || pushError) && (
@@ -424,15 +388,15 @@ export default function RegisterPage() {
               <ul className="space-y-1 text-sm text-gray-400">
                 <li className="flex items-center gap-2">
                   <CheckIcon className="h-4 w-4 text-green-400" />
-                  Account verification link
+                  WiFi connection status updates
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckIcon className="h-4 w-4 text-green-400" />
-                  Wi-Fi setup instructions
+                  New venue alerts nearby
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckIcon className="h-4 w-4 text-green-400" />
-                  New venue alerts (optional)
+                  Important account updates
                 </li>
               </ul>
             </div>
@@ -447,7 +411,7 @@ export default function RegisterPage() {
                 {isInitializing ? (
                   'Preparing...'
                 ) : loading ? (
-                  'Enabling...'
+                  'Loading...'
                 ) : (
                   <>
                     <BellIcon className="h-5 w-5 mr-2" />
@@ -502,63 +466,6 @@ export default function RegisterPage() {
                 <p>userAgent: {typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 50) + '...' : 'N/A'}</p>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Verification Sent step
-  if (step === 'verification-sent') {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 py-12">
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-        </div>
-
-        <Card className="max-w-md w-full">
-          <CardContent className="py-8 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 mb-6">
-              <CheckIcon className="h-8 w-8 text-green-400" />
-            </div>
-            
-            <h2 className="text-2xl font-bold text-white mb-2">Check Your Notifications!</h2>
-            <p className="text-gray-400 mb-6">
-              We've sent a verification link to your device. Tap the notification to verify your account and get your Wi-Fi settings.
-            </p>
-
-            <div className="bg-white/5 rounded-lg p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <div className="bg-indigo-500 rounded-lg p-2 flex-shrink-0">
-                  <WifiIcon className="h-5 w-5 text-white" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-medium text-white">✅ Verify Your Account</p>
-                  <p className="text-xs text-gray-400">Tap to verify your Pulse WiFi account...</p>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-400 mb-4">
-              Didn't receive it? Check your notification center or
-            </p>
-
-            <Button 
-              onClick={handleEnablePush}
-              variant="secondary"
-              loading={loading}
-              className="w-full"
-            >
-              Resend Verification
-            </Button>
-
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="mt-4 text-sm text-gray-500 hover:text-gray-400"
-            >
-              Continue to Dashboard
-            </button>
           </CardContent>
         </Card>
       </div>
