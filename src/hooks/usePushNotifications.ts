@@ -20,6 +20,20 @@ declare global {
 const ONESIGNAL_APP_ID = '728b062b-7ac8-41fd-97b1-1fa92909d22c';
 const SAFARI_WEB_ID = 'web.onesignal.auto.468a09a1-a4c0-43e5-8472-22975b523798';
 
+// Helper to detect iOS
+const isIOSDevice = () => {
+  if (typeof window === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+// Helper to detect if running as standalone PWA
+const isStandalonePWA = () => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true;
+};
+
 export function usePushNotifications(onPlayerIdChange?: (playerId: string) => void) {
   const [state, setState] = useState<PushNotificationState>({
     isSupported: false,
@@ -40,19 +54,50 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
 
     // Check if we're in browser
     if (typeof window === 'undefined') {
-      setState(prev => ({ ...prev, isSupported: false, isInitializing: false }));
+      setState(prev => ({ ...prev, isSupported: false, isInitializing: false, isReady: true }));
       return;
     }
 
+    const isIOS = isIOSDevice();
+    const isStandalone = isStandalonePWA();
+    
+    console.log('[OneSignal] Device check - iOS:', isIOS, 'Standalone:', isStandalone);
+
     // Check notification support
     if (!('Notification' in window)) {
-      console.log('[OneSignal] Notifications not supported in this browser');
+      console.log('[OneSignal] Notifications API not supported');
       setState(prev => ({ 
         ...prev, 
         isSupported: false, 
         isInitializing: false,
         isReady: true,
         error: 'Notifications not supported in this browser',
+      }));
+      return;
+    }
+
+    // On iOS, push only works in standalone PWA mode
+    if (isIOS && !isStandalone) {
+      console.log('[OneSignal] iOS detected but not in standalone mode - push won\'t work');
+      setState(prev => ({ 
+        ...prev, 
+        isSupported: false, 
+        isInitializing: false,
+        isReady: true,
+        error: 'On iPhone/iPad, you must install the app to your home screen first to enable notifications.',
+      }));
+      return;
+    }
+
+    // Check if service workers are supported
+    if (!('serviceWorker' in navigator)) {
+      console.log('[OneSignal] Service workers not supported');
+      setState(prev => ({ 
+        ...prev, 
+        isSupported: false, 
+        isInitializing: false,
+        isReady: true,
+        error: 'Service workers not supported',
       }));
       return;
     }
@@ -64,15 +109,22 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
     }));
 
     const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ONESIGNAL_APP_ID;
+    const safariWebId = process.env.NEXT_PUBLIC_ONESIGNAL_SAFARI_WEB_ID || SAFARI_WEB_ID;
     
     try {
-      console.log('[OneSignal] Starting initialization with appId:', appId);
+      console.log('[OneSignal] Starting initialization...');
+      console.log('[OneSignal] App ID:', appId);
+      console.log('[OneSignal] Safari Web ID:', safariWebId);
       
       // Initialize the deferred array
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       
+      // Check if SDK already loaded
+      const existingScript = document.getElementById('onesignal-sdk');
+      
       // Load SDK script if not already loaded
-      if (!document.getElementById('onesignal-sdk')) {
+      if (!existingScript && !window.OneSignal) {
+        console.log('[OneSignal] Loading SDK script...');
         const script = document.createElement('script');
         script.id = 'onesignal-sdk';
         script.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
@@ -90,6 +142,8 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
         };
         
         document.head.appendChild(script);
+      } else {
+        console.log('[OneSignal] SDK already loaded or script exists');
       }
 
       // Set initialization timeout
@@ -110,11 +164,37 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
       // Push init function to deferred array
       window.OneSignalDeferred.push(async function(OneSignal: any) {
         try {
-          console.log('[OneSignal] Initializing...');
+          console.log('[OneSignal] Running init...');
+          
+          // Check if already initialized
+          if (OneSignal.initialized) {
+            console.log('[OneSignal] Already initialized, skipping...');
+            clearTimeout(initTimeout);
+            
+            const isPushSupported = OneSignal.Notifications.isPushSupported();
+            const permission = await OneSignal.Notifications.permission;
+            const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
+            const subscriptionId = OneSignal.User.PushSubscription.id;
+            
+            setState(prev => ({
+              ...prev,
+              isSupported: isPushSupported,
+              isEnabled: isSubscribed,
+              playerId: subscriptionId || null,
+              permissionStatus: permission ? 'granted' : Notification.permission,
+              isInitializing: false,
+              isReady: true,
+            }));
+            
+            if (subscriptionId) {
+              onPlayerIdChange?.(subscriptionId);
+            }
+            return;
+          }
           
           await OneSignal.init({
             appId: appId,
-            safari_web_id: SAFARI_WEB_ID,
+            safari_web_id: safariWebId,
             notifyButton: {
               enable: false, // We use our own UI
             },
@@ -195,31 +275,41 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
             }
           });
 
-        } catch (initError) {
+        } catch (initError: any) {
           clearTimeout(initTimeout);
           console.error('[OneSignal] Init error:', initError);
           setState(prev => ({ 
             ...prev, 
             isInitializing: false,
             isReady: true,
-            error: 'Failed to initialize notifications',
+            error: initError?.message || 'Failed to initialize notifications',
           }));
         }
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('[OneSignal] Setup error:', error);
       setState(prev => ({ 
         ...prev, 
         isInitializing: false,
         isReady: true,
-        error: 'Failed to setup notifications',
+        error: error?.message || 'Failed to setup notifications',
       }));
     }
   }, [onPlayerIdChange]);
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     console.log('[OneSignal] Requesting permission...');
+    
+    // On iOS not in standalone mode, can't request
+    if (isIOSDevice() && !isStandalonePWA()) {
+      console.log('[OneSignal] iOS not in standalone mode, cannot request permission');
+      setState(prev => ({ 
+        ...prev, 
+        error: 'Please install the app to your home screen first, then open it from there.',
+      }));
+      return false;
+    }
     
     // Wait for OneSignal to be ready
     if (!window.OneSignal) {
@@ -257,7 +347,7 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
       await window.OneSignal.Notifications.requestPermission();
       
       // Wait for subscription to complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Get updated subscription state
       const isSubscribed = await window.OneSignal.User.PushSubscription.optedIn;
@@ -270,6 +360,7 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
         isEnabled: isSubscribed,
         playerId: subscriptionId || prev.playerId,
         permissionStatus: isSubscribed ? 'granted' : Notification.permission,
+        error: null,
       }));
       
       if (subscriptionId) {
@@ -277,11 +368,11 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
       }
       
       return isSubscribed;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[OneSignal] Permission request error:', error);
       setState(prev => ({ 
         ...prev, 
-        error: 'Failed to enable notifications. Please check your browser settings.',
+        error: error?.message || 'Failed to enable notifications. Please check your browser settings.',
       }));
       return false;
     }
@@ -306,5 +397,8 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
     ...state,
     requestPermission,
     optOut,
+    // Expose helpers
+    isIOS: isIOSDevice(),
+    isStandalone: isStandalonePWA(),
   };
 }

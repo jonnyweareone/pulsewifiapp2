@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { Button, Input, Card, CardHeader, CardTitle, CardDescription, CardContent, Alert } from '@/components/ui';
-import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriangleIcon, ShareIcon } from '@heroicons/react/24/outline';
 
 type Step = 'form' | 'install-pwa' | 'enable-push' | 'verification-sent';
 
@@ -24,9 +24,11 @@ export default function RegisterPage() {
     permissionStatus,
     isInitializing,
     isReady,
+    isIOS,
+    isStandalone,
     error: pushError 
   } = usePushNotifications();
-  const { isIOS, isStandalone, isInstallable, promptInstall } = usePWAInstall();
+  const { isInstallable, promptInstall } = usePWAInstall();
 
   const [step, setStep] = useState<Step>('form');
   const [email, setEmail] = useState('');
@@ -36,8 +38,9 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [debugTaps, setDebugTaps] = useState(0);
 
-  // Check if iOS and needs PWA install first
+  // iOS needs PWA install if not in standalone mode
   const needsPWAInstall = isIOS && !isStandalone;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,7 +72,7 @@ export default function RegisterPage() {
     if (data?.user) {
       setUserId(data.user.id);
       
-      // On iOS, need PWA install first
+      // On iOS not in standalone mode, need PWA install first
       if (needsPWAInstall) {
         setStep('install-pwa');
       } else {
@@ -86,11 +89,21 @@ export default function RegisterPage() {
 
     try {
       console.log('[Register] Starting push enable flow...');
+      console.log('[Register] isIOS:', isIOS, 'isStandalone:', isStandalone, 'isSupported:', isSupported);
+      
+      // Check if we're on iOS but not in standalone mode
+      if (isIOS && !isStandalone) {
+        setError('On iPhone/iPad, you need to add this app to your home screen first. Tap the Share button and select "Add to Home Screen".');
+        setLoading(false);
+        setStep('install-pwa');
+        return;
+      }
+      
       const granted = await requestPermission();
       console.log('[Register] Permission granted:', granted);
       
       if (!granted) {
-        setError('Notifications are required to verify your account. Please allow notifications when prompted, or enable them in your browser settings.');
+        setError('Please allow notifications when prompted. If you accidentally blocked them, go to your browser/device settings to enable notifications for this site.');
         setLoading(false);
         return;
       }
@@ -98,7 +111,7 @@ export default function RegisterPage() {
       // Wait for player ID to be available (with timeout)
       let currentPlayerId = playerId;
       let attempts = 0;
-      const maxAttempts = 10;
+      const maxAttempts = 15;
       
       while (!currentPlayerId && attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -109,7 +122,8 @@ export default function RegisterPage() {
       
       if (!currentPlayerId) {
         console.error('[Register] No player ID after', maxAttempts, 'attempts');
-        setError('Failed to register for notifications. Please refresh the page and try again.');
+        // Still proceed to dashboard, but without verification
+        setError('Notifications enabled but we couldn\'t complete verification. You can continue to the dashboard.');
         setLoading(false);
         return;
       }
@@ -145,6 +159,16 @@ export default function RegisterPage() {
   const handleSkipPush = () => {
     // Allow users to skip if notifications aren't working
     router.push('/dashboard');
+  };
+
+  const handleDebugTap = () => {
+    setDebugTaps(prev => {
+      if (prev >= 4) {
+        setShowDebug(true);
+        return 0;
+      }
+      return prev + 1;
+    });
   };
 
   // Form step
@@ -285,42 +309,51 @@ export default function RegisterPage() {
             
             <h2 className="text-2xl font-bold text-white mb-2">Install Pulse WiFi</h2>
             <p className="text-gray-400 mb-6">
-              To receive notifications on iPhone, install the app to your home screen first.
+              To receive notifications on iPhone/iPad, you need to install the app to your home screen first.
             </p>
 
             <div className="bg-white/5 rounded-lg p-4 mb-6 text-left">
-              <p className="text-sm text-gray-300 mb-3">Follow these steps:</p>
-              <ol className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-start gap-2">
-                  <span className="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">1</span>
-                  Tap the <strong className="text-white">Share</strong> button below
+              <p className="text-sm text-gray-300 mb-3 font-medium">Follow these steps:</p>
+              <ol className="space-y-3 text-sm text-gray-400">
+                <li className="flex items-start gap-3">
+                  <span className="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0 font-bold">1</span>
+                  <span>Tap the <strong className="text-white inline-flex items-center gap-1"><ShareIcon className="h-4 w-4" /> Share</strong> button at the bottom of Safari</span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <span className="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">2</span>
-                  Scroll down and tap <strong className="text-white">"Add to Home Screen"</strong>
+                <li className="flex items-start gap-3">
+                  <span className="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0 font-bold">2</span>
+                  <span>Scroll down and tap <strong className="text-white">"Add to Home Screen"</strong></span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <span className="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">3</span>
-                  Tap <strong className="text-white">"Add"</strong> in the top right
+                <li className="flex items-start gap-3">
+                  <span className="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0 font-bold">3</span>
+                  <span>Tap <strong className="text-white">"Add"</strong> in the top right corner</span>
                 </li>
-                <li className="flex items-start gap-2">
-                  <span className="bg-indigo-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0">4</span>
-                  Open <strong className="text-white">Pulse WiFi</strong> from your home screen
+                <li className="flex items-start gap-3">
+                  <span className="bg-indigo-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs flex-shrink-0 font-bold">4</span>
+                  <span>Open <strong className="text-white">Pulse WiFi</strong> from your home screen and come back here</span>
                 </li>
               </ol>
             </div>
 
-            <p className="text-xs text-gray-500 mb-4">
-              Already installed? Open the app from your home screen to continue.
-            </p>
+            <Alert variant="warning" className="mb-6 text-left text-sm">
+              <div className="flex items-start gap-2">
+                <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <span>Apple requires apps to be installed to the home screen before they can send notifications. This is a security feature.</span>
+              </div>
+            </Alert>
 
             <Button 
               onClick={() => setStep('enable-push')}
-              variant="secondary"
               className="w-full"
             >
-              I've installed the app
+              I've installed the app - Continue
             </Button>
+            
+            <button
+              onClick={handleSkipPush}
+              className="mt-4 text-sm text-gray-500 hover:text-gray-400 block w-full"
+            >
+              Skip for now (no notifications)
+            </button>
           </CardContent>
         </Card>
       </div>
@@ -329,6 +362,9 @@ export default function RegisterPage() {
 
   // Enable Push step
   if (step === 'enable-push') {
+    // Check again if iOS and not standalone
+    const stillNeedsPWA = isIOS && !isStandalone;
+    
     return (
       <div className="min-h-screen flex items-center justify-center px-4 py-12">
         <div className="absolute inset-0 -z-10">
@@ -347,19 +383,37 @@ export default function RegisterPage() {
               We'll send you a verification link and your Wi-Fi setup instructions via notification.
             </p>
 
-            {error && (
+            {(error || pushError) && (
               <Alert variant="error" className="mb-6 text-left">
-                {error}
+                {error || pushError}
               </Alert>
             )}
 
-            {!isSupported && (
+            {stillNeedsPWA && (
               <Alert variant="warning" className="mb-6 text-left">
                 <div className="flex items-start gap-2">
                   <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
                   <div>
-                    <p className="font-medium">Notifications not supported</p>
-                    <p className="text-sm mt-1">Your browser doesn't support push notifications. You can still use Pulse WiFi but won't receive instant updates.</p>
+                    <p className="font-medium">Not installed yet</p>
+                    <p className="text-sm mt-1">It looks like you're still in the browser. Please install the app to your home screen first.</p>
+                    <button 
+                      onClick={() => setStep('install-pwa')}
+                      className="text-sm text-indigo-400 hover:text-indigo-300 mt-2 underline"
+                    >
+                      Show me how
+                    </button>
+                  </div>
+                </div>
+              </Alert>
+            )}
+
+            {!isSupported && !stillNeedsPWA && (
+              <Alert variant="warning" className="mb-6 text-left">
+                <div className="flex items-start gap-2">
+                  <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
+                  <div>
+                    <p className="font-medium">Notifications not available</p>
+                    <p className="text-sm mt-1">Your browser or device doesn't support push notifications. You can still use Pulse WiFi but won't receive instant updates.</p>
                   </div>
                 </div>
               </Alert>
@@ -383,7 +437,7 @@ export default function RegisterPage() {
               </ul>
             </div>
 
-            {isSupported ? (
+            {isSupported && !stillNeedsPWA ? (
               <Button 
                 onClick={handleEnablePush}
                 loading={loading}
@@ -391,13 +445,23 @@ export default function RegisterPage() {
                 className="w-full"
               >
                 {isInitializing ? (
-                  'Loading...'
+                  'Preparing...'
+                ) : loading ? (
+                  'Enabling...'
                 ) : (
                   <>
                     <BellIcon className="h-5 w-5 mr-2" />
                     Enable Notifications
                   </>
                 )}
+              </Button>
+            ) : stillNeedsPWA ? (
+              <Button 
+                onClick={() => setStep('install-pwa')}
+                className="w-full"
+              >
+                <DevicePhoneMobileIcon className="h-5 w-5 mr-2" />
+                Install App First
               </Button>
             ) : (
               <Button 
@@ -412,19 +476,21 @@ export default function RegisterPage() {
               onClick={handleSkipPush}
               className="mt-4 text-sm text-gray-500 hover:text-gray-400 block w-full"
             >
-              Skip for now (limited access)
+              Skip for now
             </button>
 
             {/* Debug info - tap 5 times to show */}
             <button 
-              onClick={() => setShowDebug(!showDebug)}
-              className="mt-4 text-xs text-gray-600 hover:text-gray-500"
+              onClick={handleDebugTap}
+              className="mt-6 text-xs text-gray-700 hover:text-gray-600 w-full h-8"
             >
-              {showDebug ? 'Hide debug' : ''}
+              {showDebug ? 'Hide debug info' : '\u00A0'}
             </button>
             
             {showDebug && (
-              <div className="mt-4 p-3 bg-black/50 rounded text-left text-xs font-mono text-gray-400">
+              <div className="mt-2 p-3 bg-black/50 rounded text-left text-xs font-mono text-gray-400 border border-gray-800">
+                <p>isIOS: {String(isIOS)}</p>
+                <p>isStandalone: {String(isStandalone)}</p>
                 <p>isSupported: {String(isSupported)}</p>
                 <p>isReady: {String(isReady)}</p>
                 <p>isInitializing: {String(isInitializing)}</p>
@@ -433,6 +499,7 @@ export default function RegisterPage() {
                 <p>playerId: {playerId || 'null'}</p>
                 <p>pushError: {pushError || 'null'}</p>
                 <p>userId: {userId || 'null'}</p>
+                <p>userAgent: {typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 50) + '...' : 'N/A'}</p>
               </div>
             )}
           </CardContent>
@@ -490,7 +557,7 @@ export default function RegisterPage() {
               onClick={() => router.push('/dashboard')}
               className="mt-4 text-sm text-gray-500 hover:text-gray-400"
             >
-              Skip for now (limited access)
+              Continue to Dashboard
             </button>
           </CardContent>
         </Card>
