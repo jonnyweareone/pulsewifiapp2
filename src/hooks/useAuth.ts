@@ -65,11 +65,17 @@ export function useAuth() {
 
   const signUp = useCallback(
     async (email: string, password: string) => {
+      // Sign up WITHOUT email confirmation - we use push notification verification instead
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          // Don't send confirmation email - we verify via push notification
+          emailRedirectTo: undefined,
+          data: {
+            // Mark that this user needs push verification
+            requires_push_verification: true,
+          },
         },
       });
       return { data, error };
