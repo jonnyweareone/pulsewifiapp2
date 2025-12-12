@@ -199,7 +199,7 @@ export function usePushNotifications(onPlayerIdChange?: (playerId: string) => vo
               enable: false, // We use our own UI
             },
             allowLocalhostAsSecureOrigin: process.env.NODE_ENV === 'development',
-            serviceWorkerPath: '/OneSignalSDKWorker.js',
+            serviceWorkerPath: '/sw.js',
             serviceWorkerParam: { scope: '/' },
             promptOptions: {
               slidedown: {

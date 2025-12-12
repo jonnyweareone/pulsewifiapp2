@@ -1,3 +1,6 @@
+// Import OneSignal SDK for push notifications
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
+
 const CACHE_NAME = 'pulse-wifi-v1';
 const STATIC_CACHE = 'pulse-static-v1';
 const DYNAMIC_CACHE = 'pulse-dynamic-v1';
