@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import './globals.css';
 import { ServiceWorkerRegistration, PWAInstallPrompt } from '@/components/pwa';
 
@@ -67,6 +68,12 @@ export default function RootLayout({
         <link rel="apple-touch-startup-image" href="/splash/apple-splash-640-1136.jpg" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
       </head>
       <body className="font-sans antialiased">
+        {/* OneSignal SDK - loaded early for push notifications */}
+        <Script
+          id="onesignal-sdk"
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+          strategy="afterInteractive"
+        />
         <ServiceWorkerRegistration />
         {children}
         <PWAInstallPrompt />
