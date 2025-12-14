@@ -14,16 +14,21 @@ import { WifiIcon, CheckIcon, BellIcon, DevicePhoneMobileIcon, ExclamationTriang
 
 type Step = 'form' | 'install-pwa' | 'enable-push';
 
-// Check if username is available
+// Check if username is available using the secure database function
 async function checkUsernameAvailable(username: string): Promise<boolean> {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('username', username.toLowerCase())
-    .maybeSingle();
   
-  return !data && !error;
+  // Use the secure database function that bypasses RLS
+  const { data, error } = await supabase
+    .rpc('check_username_available', { check_username: username });
+  
+  if (error) {
+    console.error('[Register] Username check error:', error);
+    // If there's an error, assume available to let them try (will fail at signup if taken)
+    return true;
+  }
+  
+  return data === true;
 }
 
 // Generate username suggestion from name
