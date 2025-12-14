@@ -43,6 +43,7 @@ export function Navbar() {
   const navLinks = user
     ? [
         { href: '/dashboard', label: 'Dashboard' },
+        { href: '/dashboard/family', label: 'Family' },
         { href: '/onboarding/passpoint', label: 'Get WiFi' },
         { href: '/check', label: 'Speed Test' },
       ]
