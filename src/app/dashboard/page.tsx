@@ -32,6 +32,8 @@ import {
   ExclamationCircleIcon,
   ArrowRightIcon,
   SignalIcon,
+  UserGroupIcon,
+  ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 
 interface PasspointCredential {
@@ -287,6 +289,44 @@ export default function DashboardPage() {
                       <ArrowRightIcon className="h-4 w-4 text-gray-500 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                     </button>
                   </Link>
+                </CardContent>
+              </Card>
+
+              {/* Family Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <UserGroupIcon className="h-5 w-5 text-indigo-400" />
+                    Family
+                  </CardTitle>
+                  <CardDescription>Manage WiFi access for your children</CardDescription>
+                </CardHeader>
+
+                <CardContent className="space-y-3">
+                  <Link href="/dashboard/family" className="block">
+                    <button className="w-full p-4 bg-white/5 hover:bg-white/10 rounded-lg transition-colors text-left flex items-center gap-3 group">
+                      <div className="p-2 bg-indigo-500/20 rounded-lg group-hover:bg-indigo-500/30 transition-colors">
+                        <ShieldCheckIcon className="h-5 w-5 text-indigo-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-white">Add Child</p>
+                        <p className="text-xs text-gray-500">Safe WiFi with parental controls</p>
+                      </div>
+                      <ArrowRightIcon className="h-4 w-4 text-gray-500 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </button>
+                  </Link>
+
+                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <ShieldCheckIcon className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-green-400 font-medium">Age-appropriate filtering</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Each child gets their own credentials with automatic content filtering based on their age.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
